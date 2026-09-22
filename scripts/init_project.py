@@ -42,7 +42,7 @@ export function FeatureVisual() {
     </div>
   </CardSurface></CardFrame>;
 }
-""")
+""", encoding='utf-8')
     shots = [
         {'id':'intro','start':0,'end':3,'type':'title','headlineEn':"What's new",'headline':'这次更新，带来了什么？','description':'先用一句话讲清楚变化，再展示具体怎么用。'},
         {'id':'component','start':3,'end':7,'type':'detail','headlineEn':'Real components','headline':'直接用产品里的组件','description':'把仓库里的按钮和卡片接进来，再用代码安排它们的出场和切换。','component':'src/presentations.jsx'},
@@ -61,7 +61,7 @@ export function FeatureVisual() {
               {'at':3.45,'actionId':'component-appear','file':'assets/sfx/click.wav','gain':0.8,'role':'sfx','kind':'click'},
               {'at':7.0,'actionId':'close-enter','file':'assets/sfx/ding-dong.wav','gain':0.7,'role':'sfx','kind':'ding-dong'}]},
             'shots':shots}
-    (target/'plan.json').write_text(json.dumps(plan,ensure_ascii=False,indent=2)+'\n')
+    (target/'plan.json').write_text(json.dumps(plan,ensure_ascii=False,indent=2)+'\n', encoding='utf-8')
     (target/'BRIEF.md').write_text(f"""# 视频 brief
 
 - 状态：技术起步，尚未完成产品调研与分镜。
@@ -75,7 +75,7 @@ export function FeatureVisual() {
 - 卖点证据、风格审计与素材来源：记录在 evidence/。
 
 保留原有用户决定；没有确认的字段不要伪装成已确认。正式成片完成后同步 plan.json 与实际时间线。
-""")
+""", encoding='utf-8')
     print(json.dumps({'project':str(target),'style':args.style,'demo':True,'next':'Read references/starter.md; replace technical content before production.'},ensure_ascii=False))
 
 if __name__ == '__main__':

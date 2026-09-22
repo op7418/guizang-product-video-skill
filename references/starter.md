@@ -57,6 +57,12 @@ python3 <skill-dir>/scripts/check_delivery.py plan.json --video renders/final.mp
 
 旧工程升级时，在原 plan 补齐这些字段，更新标题 span/CSS，并把旧 sound 描述转为带实际音效文件的 audio.cues。不要重新初始化覆盖用户工程。正式模式缺字段会提示补齐，技术样片保留提醒。
 
+本套工具链的所有生成文件（`plan.json`、`presentations.jsx`、`BRIEF.md`、`audio-mix.json`）均统一采用 UTF-8 编码，以确保跨平台（特别是未开启全局 UTF-8 模式的 Windows CP936 环境）读写中文文案与音频路径时一致。若遇早期版本生成的非 UTF-8 `plan.json`，检查与混音脚本会自动识别并平滑升级为 UTF-8；也可手动执行一键转换：
+
+```sh
+python -c "from pathlib import Path; p=Path('plan.json'); p.write_text(p.read_text(encoding='locale'), encoding='utf-8')"
+```
+
 `audio.ducking` 默认开启；cue 可按语义使用不同压低幅度与恢复时间。输出 `music-ducked.wav` 和 `sfx-stem.wav` 可分别检查，混音记录保存卡点误差。参数详见声音参考。
 
 通用卡片和默认样式组件示例带有 `data-skill-placeholder` 标记；正式模式仍渲染这些占位内容时，build 会失败。应接入实际功能组件，不是只删标记。这个检查只能拦住未替换的样片，真实复用仍要靠逐镜头来源与实际渲染核对。

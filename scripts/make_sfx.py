@@ -65,6 +65,6 @@ def main():
     for name in names:
         with wave.open(str(args.output/(name+'.wav')),'wb') as f:
             f.setnchannels(1);f.setsampwidth(2);f.setframerate(RATE);f.writeframes(sound(name).tobytes())
-    (args.output/'SOURCE.txt').write_text('Original procedural UI sounds made with scripts/make_sfx.py. No samples, external recordings, or reference-video audio used. Replace these sounds when another sound better suits the product.\n')
+    (args.output/'SOURCE.txt').write_text('Original procedural UI sounds made with scripts/make_sfx.py. No samples, external recordings, or reference-video audio used. Replace these sounds when another sound better suits the product.\n', encoding='utf-8')
     print('Generated 11 original UI sound variants at 48 kHz. Audition in the final mix.')
 if __name__=='__main__':main()

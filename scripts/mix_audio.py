@@ -64,8 +64,27 @@ def duck_expression(windows):
     return result
 
 
+def load_plan(plan_path):
+    p = Path(plan_path)
+    try:
+        return json.loads(p.read_text(encoding='utf-8'))
+    except UnicodeDecodeError:
+        for enc in ['locale', 'gbk', 'cp936']:
+            try:
+                content = p.read_text() if enc == 'locale' else p.read_text(encoding=enc)
+                data = json.loads(content)
+                try:
+                    p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+                except OSError as err:
+                    print(f"Warning: Failed to rewrite '{p.name}' to UTF-8: {err}", file=sys.stderr)
+                return data
+            except (UnicodeDecodeError, json.JSONDecodeError, OSError):
+                continue
+        raise ValueError(f"Plan file '{p.name}' is not valid UTF-8. Please convert to UTF-8.")
+
+
 def mix(plan_path):
-    plan_path=plan_path.resolve();base=plan_path.parent;plan=json.loads(plan_path.read_text())
+    plan_path=plan_path.resolve();base=plan_path.parent;plan=load_plan(plan_path)
     duration=plan['duration'];audio=plan.get('audio',{});music=audio.get('music',{});cues=audio.get('cues',[])
     if not finite(duration) or duration<=0:raise ValueError('Invalid duration')
     if not isinstance(cues,list) or not cues:raise ValueError('No SFX cues. A BGM-only master is not a completed sound design.')
@@ -93,7 +112,7 @@ def mix(plan_path):
         if abs(cue['at']+offset-actions[cue['actionId']])>2/plan['fps']:raise ValueError('Cue audible landmark differs from its action by more than two frames')
     if set(required)-{c['actionId'] for c in cues}:raise ValueError('Required key actions are missing SFX')
     music_path=(base/music['file']).resolve()
-    measured=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_format','-of','json',str(music_path)],text=True))
+    measured=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_format','-of','json',str(music_path)],text=True,encoding='utf-8',errors='replace'))
     music_duration=float(measured['format']['duration']);warnings=[]
     if music_duration-duration>1:
         warnings.append(f'Music is {music_duration-duration:.2f}s longer than the film; automatic trim/fade is not a composed ending. Review and arrange the ending.')
@@ -108,23 +127,23 @@ def mix(plan_path):
     for i,cue in enumerate(cues):
         inputs += ['-i',str((base/cue['file']).resolve())]
         filters.append(f'[{i}:a]aresample=48000,aformat=channel_layouts=stereo,volume={cue.get("gain",1)},adelay={round(cue["at"]*1000)}:all=1[c{i}]')
-    filters.append(''.join(f'[c{i}]' for i in range(len(cues)))+f'amix=inputs={len(cues)}:normalize=0,apad,atrim=duration={duration}[sfx]')
+    filters.append(''.join(f'[c{i}]' for i in range(len(cues)))+f'amix=inputs={len(cues)}:normalize=0,apad=whole_dur={duration},atrim=duration={duration}[sfx]')
     # Float stem preserves summed transients until mastering; no early hard clipping.
-    run([*inputs,'-filter_complex',';'.join(filters),'-map','[sfx]','-c:a','pcm_f32le','-ar','48000',str(stem)])
+    run([*inputs,'-filter_complex',';'.join(filters),'-map','[sfx]','-t',str(duration),'-c:a','pcm_f32le','-ar','48000',str(stem)])
     windows=duck_windows(audio,cues,duration)
     envelope=duck_expression(windows)
     bg_filters=f"aresample=48000,asetnsamples=n=240:p=0,volume='{music.get('gain',1)}*({envelope})':eval=frame,afade=t=in:d=0.025,afade=t=out:st={max(0,duration-.5)}:d=0.5,atrim=duration={duration}"
     # 240 samples at 48 kHz = 5 ms steps: smoother gain automation around short click transients.
-    run(['-i',str(music_path),'-af',bg_filters,'-ar','48000','-ac','2','-c:a','pcm_f32le',str(bgm_stem)])
+    run(['-i',str(music_path),'-af',bg_filters,'-t',str(duration),'-ar','48000','-ac','2','-c:a','pcm_f32le',str(bgm_stem)])
     with tempfile.TemporaryDirectory(prefix='film-mix-') as tmp:
         raw=Path(tmp)/'raw.wav'
         graph=f'[0:a][1:a]amix=inputs=2:normalize=0,atrim=duration={duration}[mix]'
-        run(['-i',str(bgm_stem),'-i',str(stem),'-filter_complex',graph,'-map','[mix]','-ar','48000','-ac','2','-c:a','pcm_f32le',str(raw)])
-        measurement=subprocess.run(['ffmpeg','-v','info','-i',str(raw),'-af','loudnorm=I=-16:TP=-1.5:LRA=8:print_format=json','-f','null','-'],capture_output=True,text=True,check=True).stderr
+        run(['-i',str(bgm_stem),'-i',str(stem),'-filter_complex',graph,'-map','[mix]','-t',str(duration),'-ar','48000','-ac','2','-c:a','pcm_f32le',str(raw)])
+        measurement=subprocess.run(['ffmpeg','-v','info','-i',str(raw),'-af','loudnorm=I=-16:TP=-1.5:LRA=8:print_format=json','-f','null','-'],capture_output=True,text=True,encoding='utf-8',errors='replace',check=True).stderr
         stats=json.loads(measurement[measurement.rfind('{'):measurement.rfind('}')+1])
         if not all(math.isfinite(float(stats[k])) for k in ['input_i','input_tp','input_lra','input_thresh','target_offset']):raise ValueError('Silent/invalid mix')
         norm='loudnorm=I=-16:TP=-1.5:LRA=8:linear=true:'+':'.join(f'{k}={stats[v]}' for k,v in [('measured_I','input_i'),('measured_TP','input_tp'),('measured_LRA','input_lra'),('measured_thresh','input_thresh'),('offset','target_offset')])
-        final_measurement=subprocess.run(['ffmpeg','-y','-v','info','-i',str(raw),'-af',norm+':print_format=json','-ar','48000','-ac','2','-c:a','pcm_s24le',str(master)],capture_output=True,text=True,check=True).stderr
+        final_measurement=subprocess.run(['ffmpeg','-y','-v','info','-i',str(raw),'-af',norm+':print_format=json','-ar','48000','-ac','2','-c:a','pcm_s24le',str(master)],capture_output=True,text=True,encoding='utf-8',errors='replace',check=True).stderr
         final_stats=json.loads(final_measurement[final_measurement.rfind('{'):final_measurement.rfind('}')+1])
     timing=[];beat=audio.get('beatGrid',{})
     for cue in cues:
@@ -142,7 +161,7 @@ def mix(plan_path):
             'musicStem':{'file':'assets/music-ducked.wav','sha256':sha(bgm_stem)},'ducking':{'method':'cue-envelope','windows':windows,'overlap':'deepest-envelope-wins'},'timing':timing,
             'warnings':warnings,'normalization':{'requested':'linear','normalization_type':final_stats.get('normalization_type'),'measurement':stats,'output':final_stats},
             'listeningStatus':'Not auditioned by script; listen to isolated SFX, final mix and encoded MP4.'}
-    (evidence/'audio-mix.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+    (evidence/'audio-mix.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     print('Mixed BGM + '+str(len(cues))+' action cues with music ducking. Inspect assets/sfx-stem.wav and assets/master.wav before delivery.')
 
 def main():

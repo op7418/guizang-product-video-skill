@@ -120,7 +120,7 @@ def creative_checks(plan, errors, warnings, project_dir, mix_report, final_video
         if production and final_video and mix_report is None:errors.append('Final video needs --mix-report evidence of BGM + SFX assembly; audio stream existence is insufficient')
     if mix_report is not None:
         try:
-            report=json.loads(Path(mix_report).read_text())
+            report=json.loads(Path(mix_report).read_text(encoding='utf-8'))
             base=Path(project_dir)
             def digest(p):return hashlib.sha256(p.read_bytes()).hexdigest()
             if report.get('planSha256')!=digest(Path(plan_path) if plan_path else base/'plan.json'):errors.append('Mix report is stale for the current plan')
@@ -213,7 +213,7 @@ def check(plan, video=None, project_dir=None, mix_report=None, plan_path=None):
     creative_checks(plan, errors, warnings, project_dir, mix_report, bool(video), plan_path)
     if video:
         try:
-            proc=subprocess.run(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(video)],capture_output=True,text=True,check=True)
+            proc=subprocess.run(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(video)],capture_output=True,text=True,encoding='utf-8',errors='replace',check=True)
             meta=json.loads(proc.stdout)
             streams=meta.get('streams',[])
             videos=[s for s in streams if s.get('codec_type')=='video']
@@ -240,6 +240,25 @@ def check(plan, video=None, project_dir=None, mix_report=None, plan_path=None):
     return result
 
 
+def load_plan(plan_path):
+    p = Path(plan_path)
+    try:
+        return json.loads(p.read_text(encoding='utf-8'))
+    except UnicodeDecodeError:
+        for enc in ['locale', 'gbk', 'cp936']:
+            try:
+                content = p.read_text() if enc == 'locale' else p.read_text(encoding=enc)
+                data = json.loads(content)
+                try:
+                    p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+                except OSError as err:
+                    print(f"Warning: Failed to rewrite '{p.name}' to UTF-8: {err}", file=sys.stderr)
+                return data
+            except (UnicodeDecodeError, json.JSONDecodeError, OSError):
+                continue
+        raise ValueError(f"Plan file '{p.name}' is not valid UTF-8. Please convert to UTF-8.")
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('plan',type=Path)
@@ -247,7 +266,8 @@ def main():
     p.add_argument('--mix-report',type=Path)
     args=p.parse_args()
     try:
-        result=check(json.loads(args.plan.read_text()),args.video,args.plan.resolve().parent,args.mix_report,args.plan)
+        plan=load_plan(args.plan)
+        result=check(plan,args.video,args.plan.resolve().parent,args.mix_report,args.plan)
     except (OSError,ValueError) as exc:
         result={'errors':[str(exc)],'warnings':[]}
     result['ok']=not result['errors']
