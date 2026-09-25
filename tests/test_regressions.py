@@ -14,7 +14,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def module(name):
     spec=importlib.util.spec_from_file_location(name,ROOT/'scripts'/f'{name}.py')
     result=importlib.util.module_from_spec(spec);spec.loader.exec_module(result);return result
-delivery=module('check_delivery');environment=module('check_environment')
+delivery=module('check_delivery');environment=module('check_environment');mixer=module('mix_audio')
 class Delivery(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup);self.root=Path(self.temp.name).resolve()
@@ -89,6 +89,21 @@ class Preflight(unittest.TestCase):
             code,result=self.probe(Path(d));self.assertEqual(code,0);self.assertTrue(result['ready']);self.assertTrue(result['browser']['launched'])
             code,result=self.probe(Path(d));self.assertTrue(result['cached'])
             code,result=self.probe(Path(d),False);self.assertEqual(code,1);self.assertFalse(result['cached']);self.assertIn('browser-launch',result['missing'])
+class Mix(unittest.TestCase):
+    def test_sfx_stem_ends_on_silent_bed(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);(root/'a').mkdir();[(root/'a'/n).write_bytes(b'') for n in ['bgm.wav','click.wav']]
+            cues=[{'file':'a/click.wav','role':'sfx','actionId':f'x{i}','at':i*.5} for i in range(20)]
+            plan={'duration':12,'fps':30,'audio':{'music':{'file':'a/bgm.wav'},'cues':cues},'shots':[{'start':0,'actions':[{'id':f'x{i}','at':i*.5} for i in range(20)]}]}
+            (root/'plan.json').write_text(json.dumps(plan));calls=[]
+            def fake_run(args):calls.append(args);raise RuntimeError('stop after stem')
+            with patch.object(mixer,'run',side_effect=fake_run),patch.object(mixer.subprocess,'check_output',return_value='{"format":{"duration":"12"}}'):
+                with self.assertRaises(RuntimeError):mixer.mix(root/'plan.json')
+            args=calls[0];graph=args[args.index('-filter_complex')+1]
+            self.assertEqual(args[:6],['-f','lavfi','-t','12','-i','anullsrc=r=48000:cl=stereo'])
+            self.assertIn('amix=inputs=21:duration=first',graph);self.assertNotIn('apad',graph)
+            self.assertTrue(graph.startswith('[1:a]') and '[20:a]' in graph and '[21:a]' not in graph)
+            self.assertEqual(args[args.index('-t',6)+1],'12')
 class Starter(unittest.TestCase):
     def test_default_repo_and_unedited_demo_promotion(self):
         with tempfile.TemporaryDirectory() as d:

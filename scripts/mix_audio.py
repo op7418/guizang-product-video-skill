@@ -104,13 +104,14 @@ def mix(plan_path):
     stem=out/'sfx-stem.wav';master=out/'master.wav';bgm_stem=out/'music-ducked.wav'
     if any((base/s['file']).resolve() in [stem.resolve(),master.resolve(),bgm_stem.resolve()] for s in sources):
         raise ValueError('Inputs must not be the generated master or stem')
-    inputs=[];filters=[]
-    for i,cue in enumerate(cues):
+    # Silent bed of exactly `duration` is input 0 and ends amix; `amix,apad,atrim` can run away or vary in length with many inputs.
+    inputs=['-f','lavfi','-t',str(duration),'-i','anullsrc=r=48000:cl=stereo'];filters=[]
+    for i,cue in enumerate(cues,1):
         inputs += ['-i',str((base/cue['file']).resolve())]
         filters.append(f'[{i}:a]aresample=48000,aformat=channel_layouts=stereo,volume={cue.get("gain",1)},adelay={round(cue["at"]*1000)}:all=1[c{i}]')
-    filters.append(''.join(f'[c{i}]' for i in range(len(cues)))+f'amix=inputs={len(cues)}:normalize=0,apad,atrim=duration={duration}[sfx]')
+    filters.append('[0:a]'+''.join(f'[c{i}]' for i in range(1,len(cues)+1))+f'amix=inputs={len(cues)+1}:duration=first:normalize=0,atrim=duration={duration}[sfx]')
     # Float stem preserves summed transients until mastering; no early hard clipping.
-    run([*inputs,'-filter_complex',';'.join(filters),'-map','[sfx]','-c:a','pcm_f32le','-ar','48000',str(stem)])
+    run([*inputs,'-filter_complex',';'.join(filters),'-map','[sfx]','-c:a','pcm_f32le','-ar','48000','-t',str(duration),str(stem)])
     windows=duck_windows(audio,cues,duration)
     envelope=duck_expression(windows)
     bg_filters=f"aresample=48000,asetnsamples=n=240:p=0,volume='{music.get('gain',1)}*({envelope})':eval=frame,afade=t=in:d=0.025,afade=t=out:st={max(0,duration-.5)}:d=0.5,atrim=duration={duration}"
