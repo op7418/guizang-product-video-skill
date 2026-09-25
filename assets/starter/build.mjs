@@ -20,6 +20,7 @@ const result = await build({
   external: integration.external || [],
   loader: {'.js': 'jsx', '.css': 'css', '.module.css': 'local-css', '.png': 'file', '.jpg': 'file', '.svg': 'file', '.woff': 'file', '.woff2': 'file', '.ttf': 'file', ...integration.loaders},
   assetNames: 'assets/[name]-[hash]', logLevel: 'error',
+  ...(integration.esbuild || {}),   // e.g. tsconfigRaw to relax the product's compiler options for a display build
 });
 await mkdir('evidence', {recursive: true});
 await writeFile('evidence/component-imports.json', JSON.stringify(result.metafile, null, 2));

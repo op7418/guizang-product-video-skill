@@ -95,10 +95,15 @@ export default {
     'next/image': path.join(video, 'src/adapters/next-image.jsx'),     // 组件真的用到才加
   },
   external: [], loaders: {}, define: {},
+  esbuild: {},   // 其他 esbuild 选项，例如 tsconfigRaw
 };
 ```
 
 构建器打出浏览器 IIFE 包：先从产品的 `node_modules` 解析依赖，React/ReactDOM 统一指向视频工程的那一份（两份 React 会导致 `Cannot read properties of null (reading 'useContext')`）。产品依赖缺失时，只在视频工程安装固定版本的展示依赖。pnpm 等严格隔离的布局按实际 workspace 映射解析路径。含 top-level await 的依赖不能打进 IIFE：换用它的同步入口，或把构建改成 ESM。
+
+monorepo 里直接导出 TS 源码的 workspace 包：把包名 alias 到它的 `src`；带子路径 `exports` 的包，读它的 `package.json` 生成一张子路径 → 源文件的 alias 表。产品开了 `verbatimModuleSyntax` 时，类型导入会被原样保留，可能把服务端运行时拖进浏览器包；用 `esbuild: {tsconfigRaw: {compilerOptions: {verbatimModuleSyntax: false}}}` 只放宽这次展示构建。
+
+暗色 token 挂在 `:root` 的 `dark` 变体上时，`dark` class 必须加在 `<html>` 上（`client.jsx` 挂载前执行 `document.documentElement.classList.add('dark')`），加在某个 div 上不生效。同一画面要同时出现几套主题时，先确认 Tailwind 工具类直接引用 `var(--token)`，再把主题色写成元素级 CSS 变量。
 
 某个 alias 需要"换掉一个模块里的一个导出、其余照旧"时（例如让弹层的 portal 挂进镜头里），adapter 可以先 `export * from '<真实文件绝对路径>'`，再单独导出同名的替身。
 

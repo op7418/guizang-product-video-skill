@@ -9,4 +9,8 @@ export default {
   external: [],
   loaders: {},
   define: {},
+  // Extra esbuild options. Example: products with verbatimModuleSyntax keep type-only imports,
+  // which can drag server runtimes into the bundle:
+  //   esbuild: {tsconfigRaw: {compilerOptions: {verbatimModuleSyntax: false}}},
+  esbuild: {},
 };
