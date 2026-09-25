@@ -33,11 +33,11 @@ def main():
 import {CardFrame, CardSurface, FilmButton, FilmBadge} from '../assets/fallback/primitives.jsx';
 // Technical fixture using the adapted fallback primitives, not product business components.
 export function FeatureVisual() {
-  return <CardFrame data-enter="0.10" data-skill-placeholder="true"><CardSurface style={{padding:54}}>
+  return <CardFrame data-skill-placeholder="true"><CardSurface style={{padding:54}}>
     <FilmBadge>组件展示 / DEMO</FilmBadge>
     <h2>组件可以直接接进来。</h2>
     <p>把真实产品组件接进来，再安排选中、展开和切换。</p>
-    <div data-enter="0.45" style={{display:'flex',gap:16,marginTop:42,fontSize:26}}>
+    <div style={{display:'flex',gap:16,marginTop:42,fontSize:26}}>
       <FilmButton>主要操作</FilmButton><FilmButton variant="secondary">次要操作</FilmButton>
     </div>
   </CardSurface></CardFrame>;
@@ -76,7 +76,42 @@ export function FeatureVisual() {
 
 保留原有用户决定；没有确认的字段不要伪装成已确认。正式成片完成后同步 plan.json 与实际时间线。
 """)
-    print(json.dumps({'project':str(target),'style':args.style,'demo':True,'next':'Read references/starter.md; replace technical content before production.'},ensure_ascii=False))
+    (target/'DIRECTION.md').write_text('''# 影片方向（写代码前完成，见 references/direction.md）
+
+> 这份文件只有问题，没有答案。每一项都从这个产品本身推导；不要照抄案例或上一支片子。
+
+## 1. 参考拆解（用户给了参考才写）
+| 参考里的手法 | 它在表达什么 | 本片是否采用、怎么改写 |
+|---|---|---|
+
+## 2. 产品气质
+- 产品是做什么的、给谁用、用起来是什么感觉：
+- 设计语言（色板、字体、圆角、明暗主题）来源：
+- 能成为视觉母题的产品元素（标志几何、核心界面、数据形态、领域隐喻）：
+
+## 3. 三个方向（沿不同的轴拉开）
+| 方向 | 底色与光 | 字体声音 | 母题来源 | 镜头语言 | 节奏 | 音乐 |
+|---|---|---|---|---|---|---|
+| A | | | | | | |
+| B | | | | | | |
+| C | | | | | | |
+
+## 4. 选择与理由
+- 选哪个、为什么适合这个产品和受众：
+- 本片专属手法（3–5 个，每个写出从产品哪一点推导而来）：
+- 与本工作区既往影片的区别（开场、转场、背景、配乐）：
+
+## 5. 画面规范
+- 画幅 / 帧率 / 底色 / 安全区：
+- 字号阶梯（英文、中文、说明）与字体来源：
+- 产品界面上镜倍数（正文 ≥ 22px）与明暗主题：
+- 动效语法（入场、镜头运动、缓动、禁止项）：
+
+## 6. 镜头表
+| # | 时间 | 镜头 | 主角 | 画面与动作 | 文案 | 声音 |
+|---|---|---|---|---|---|---|
+''')
+    print(json.dumps({'project':str(target),'style':args.style,'demo':True,'next':'Research the product, then write DIRECTION.md (references/direction.md) before production shots.'},ensure_ascii=False))
 
 if __name__ == '__main__':
     main()

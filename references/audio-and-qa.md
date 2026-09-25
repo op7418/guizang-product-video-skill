@@ -14,7 +14,9 @@
 
 声音检查分三步：先单独听 `sfx-stem.wav`，确认关键事件有音效；再听 master，确认没有被配乐淹没；最后听编码后的 MP4，确认剪辑/导出没有漏掉。只检查文件存在或音轨数量都不够。有能力试听时按动作逐项检查；无法试听要准确标明，不假装已通过听感验收。
 
-找不到合适音效时，直接从 [内置音效目录](../assets/audio/sfx/) 复制所缺的 click/click-alt、pop、toggle、typing、ding-dong、success、error、resolve、whoosh 或 sweep。这些是现成的原创 WAV，不需要先运行生成器；需要调整音色时才改 `make_sfx.py`，输出到新目录。内置音效的听觉落点也要按素材与实际动作核对。
+找不到合适音效时，直接从 [内置音效目录](../assets/audio/sfx/) 复制所缺的 click/click-alt、pop、toggle、typing、ding-dong、success、error、resolve、whoosh 或 sweep。这些是现成的原创 WAV，不需要先运行生成器；需要调整音色时才改 `make_sfx.py`，输出到新目录。
+
+**增益要按实测电平设。** 内置音效峰值约 −20 dBFS，录音素材接近 0 dBFS；同样的 gain，前者会被配乐盖住。用 `scripts/sfx_landmarks.py` 查每个文件的峰值电平和落点。混音后可以逐个 cue 比较音效轨与压低后音乐在出现那一刻的峰值：音效不应明显低于音乐。
 
 ```sh
 # 将代码原创配乐输出到 assets/music.wav。
@@ -66,7 +68,7 @@ python3 <skill-dir>/scripts/mix_audio.py plan.json
 ## 卡点和声音的变化
 
 1. 听/分析实际音乐，确定 BPM 与第一拍时间；节奏不固定时记下实际拍点，不编一个 120 BPM。主要转场可对重拍，轻操作不必全对重拍。
-2. 图像和声音一起调整时间。`cue.at` 是文件开始，`syncOffset` 是文件内部的听觉落点，因此 `cue.at + syncOffset = shot.start + action.at`。whoosh 可以提前开始，让最强的一下落在切换处；点击的落点通常在文件开头。
+2. 图像和声音一起调整时间。`cue.at` 是文件开始，`syncOffset` 是文件内部的听觉落点，因此 `cue.at + syncOffset = shot.start + action.at`。落点用 `scripts/sfx_landmarks.py` 实测：点击类取起音点，whoosh/冲击取峰值（它们要比画面先开始）。
 3. 使用节拍网格时填 `audio.beatGrid:{bpm,offset}`；需要对拍的 cue 标 `onBeat:true`，可用 `beatDivision:1|2|4` 对四分/八分/十六分音符。混音记录会报告与动作、最近拍点相差多少帧；只报告，不悄悄挪动音效造成音画错位。
 4. 30–60 秒影片一般选 4–6 种职责：选择/确认、弹出/切换、键入、空间转场、完成/通知、收尾。类别服务画面，不为满足数量虚构异常或通知。短片可更少。
 5. 连续点击可用 click/click-alt 做轻微音色变化，输入声是有节奏的短簇，转场音只留给画面结构变化，叮咚保留给值得注意的状态。不要所有字出现都“叮”一下。
@@ -91,7 +93,7 @@ ffmpeg -i renders/final.mp4 -af loudnorm=I=-16:TP=-1.5:LRA=8:print_format=json -
 
 脚本发现时间缺口/重叠、错误规格、缺少音轨、卖点无来源会失败；阅读时长和类型过于单一发出提醒。不能据此宣布卖点真实、视觉无裁切或音乐好听。
 
-冻结检测只辅助定位长停留。大面积白底、小区域运动容易误报，应回看片段；不要为了让 detector 通过加入无意义动画。
+`--video` 还会给出 `pacing`（静止帧比例、最长静止段、硬切次数），只用来定位该回看的片段。大面积纯色背景、小区域运动容易被算成静止；不要为了数字加入无意义动画。画面审阅方法见 [审片](review.md)。
 
 ## 最终人工检查
 

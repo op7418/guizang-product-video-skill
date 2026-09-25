@@ -19,6 +19,7 @@ class Delivery(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup);self.root=Path(self.temp.name).resolve()
         (self.root/'evidence.md').write_text('Release evidence fixture')
+        (self.root/'DIRECTION.md').write_text('# 方向\n因为产品是模型选择器，所以镜头推近选择器。\n| # | 镜头 |\n|---|---|\n| 1 | feature |\n')
         self.plan={'demo':False,'style':'repo','duration':5,'fps':30,'width':1920,'height':1080,'audioRequired':False,'audioExceptionReason':'User requested a silent version',
             'typography':{'mode':'bilingual','zhStyle':'sans-serif','zhFont':'Noto Sans CJK','enFont':'Georgia'},
             'shots':[{'id':'feature','start':0,'end':5,'type':'detail','headline':'切换模型，继续对话','headlineEn':'Switch models','claim':True,'source':['file:evidence.md'],
@@ -63,6 +64,14 @@ class Delivery(unittest.TestCase):
             self.plan['shots'][0]['source']=[source];self.assertTrue(self.errors())
         self.plan['shots'][0]['source']=['repo:release.md'];self.assertEqual(self.errors(),[])
         self.assertEqual(delivery.source_file(str(repo/'release.md'),self.root,None),repo/'release.md')
+    def test_production_requires_direction(self):
+        (self.root/'DIRECTION.md').unlink()
+        self.assertTrue(any('DIRECTION.md' in x for x in self.errors()))
+        self.plan['demo']=True;self.assertFalse(any('DIRECTION.md' in x for x in self.errors()))
+    def test_direction_without_reasons_warns(self):
+        (self.root/'DIRECTION.md').write_text('| # | 镜头 |\n|---|---|\n| 1 | feature |\n')
+        warnings=delivery.check(self.plan,project_dir=self.root)['warnings']
+        self.assertTrue(any('derive devices' in w for w in warnings))
     def test_external_evidence_not_treated_as_file(self):
         self.plan['shots'][0]['source']=['https://example.org/release.md','tag:v1.0','commit:abc123'];self.assertEqual(self.errors(),[])
 class Preflight(unittest.TestCase):
@@ -79,7 +88,7 @@ class Preflight(unittest.TestCase):
                     if not launch_ok:return {'ok':False,'stdout':'','stderr':'Permission denied','output':'Permission denied'}
                 else:
                     self.assertNotIn('executablePath()',js)
-                    out=json.dumps({k:{'version':'1.0','path':'/unavailable/'+k} for k in ['playwright','esbuild','react','react-dom']})
+                    out=json.dumps({k:{'version':'1.0','path':'/unavailable/'+k} for k in ['playwright','esbuild','react','react-dom','gsap','three']})
             return {'ok':True,'stdout':out,'stderr':'','output':out}
         with patch.object(environment,'run',side_effect=fake_run),patch.object(environment.shutil,'which',side_effect=lambda n:'/bin/'+n),patch('sys.argv',['check_environment','--project',str(project)]),contextlib.redirect_stdout(io.StringIO()) as output:
             with self.assertRaises(SystemExit) as caught:environment.main()
@@ -99,9 +108,56 @@ class Starter(unittest.TestCase):
             self.assertIn(str(repo.resolve()),(project/'BRIEF.md').read_text())
             plan['demo']=False
             self.assertTrue(any('at least one' in e for e in delivery.check(plan,project_dir=project)['errors']))
-    @unittest.skipUnless(shutil.which('node'),'Node needed for timeline regression')
-    def test_seek_without_progress(self):
-        script="""const fs=require('fs'),vm=require('vm');const scene={dataset:{start:'0',end:'10'},style:{},querySelectorAll:()=>[],querySelector:()=>null};const context={window:{FILM:{duration:10,fps:30}},document:{querySelectorAll:()=>[scene]}};vm.createContext(context);vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),context);context.window.seek(8);context.window.seek(2);if(context.window.CURRENT_TIME!==2)throw Error('seek failed');"""
-        subprocess.run(['node','-e',script,str(ROOT/'assets/starter/src/timeline.js')],capture_output=True,check=True)
+    def test_init_writes_direction_questions_not_answers(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo=Path(d)/'repo';repo.mkdir();project=Path(d)/'video'
+            subprocess.run([sys.executable,str(ROOT/'scripts/init_project.py'),'--output',str(project),'--style','repo','--repo',str(repo)],capture_output=True,check=True)
+            text=(project/'DIRECTION.md').read_text()
+            for heading in ['参考拆解','产品气质','三个方向','选择与理由','画面规范','镜头表']:self.assertIn(heading,text)
+            self.assertIn('不要照抄',text)
+            self.assertTrue((project/'src/engine.js').is_file())
+    def test_sample_views_cover_plan_shots(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo=Path(d)/'repo';repo.mkdir();project=Path(d)/'video'
+            subprocess.run([sys.executable,str(ROOT/'scripts/init_project.py'),'--output',str(project),'--style','repo','--repo',str(repo)],capture_output=True,check=True)
+            ids=[s['id'] for s in json.loads((project/'plan.json').read_text())['shots']]
+            index=(project/'src/shots/index.js').read_text()
+            for i in ids:self.assertIn(i+':',index)
+class Mix(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('ffmpeg'),'FFmpeg needed')
+    def test_outputs_are_capped_to_film_duration(self):
+        import math,struct,wave
+        mixer=module('mix_audio')
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);(root/'assets/sfx').mkdir(parents=True)
+            def tone(path,seconds,freq,channels=2):
+                rate=48000;frames=[]
+                for i in range(int(rate*seconds)):
+                    v=int(0.3*32767*math.sin(2*math.pi*freq*i/rate));frames+= [v]*channels
+                with wave.open(str(path),'wb') as w:w.setnchannels(channels);w.setsampwidth(2);w.setframerate(rate);w.writeframes(struct.pack('<%dh'%len(frames),*frames))
+            tone(root/'assets/music.wav',3.2,220);tone(root/'assets/sfx/a.wav',0.4,880);tone(root/'assets/sfx/b.wav',1.5,660,1)
+            actions=[{'id':f'k{i}','at':0.2+i*0.3,'action':'key','soundRequired':True} for i in range(8)]
+            cues=[{'at':a['at'],'actionId':a['id'],'file':'assets/sfx/'+('a' if i%2 else 'b')+'.wav','gain':0.8,'role':'sfx','kind':'click'} for i,a in enumerate(actions)]
+            plan={'duration':3,'fps':30,'shots':[{'id':'s','start':0,'end':3,'actions':actions}],'audio':{'music':{'file':'assets/music.wav','gain':0.6},'cues':cues,'ducking':{'enabled':True}}}
+            (root/'plan.json').write_text(json.dumps(plan))
+            with contextlib.redirect_stdout(io.StringIO()):mixer.mix(root/'plan.json')
+            for name in ['sfx-stem.wav','music-ducked.wav','master.wav']:
+                out=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','csv=p=0',str(root/'assets'/name)],capture_output=True,text=True).stdout
+                self.assertAlmostEqual(float(out),3.0,delta=0.05,msg=name)
+class Landmarks(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('ffmpeg'),'FFmpeg needed')
+    def test_onset_and_peak(self):
+        import math,struct,wave
+        landmarks=module('sfx_landmarks').landmarks
+        with tempfile.TemporaryDirectory() as d:
+            f=Path(d)/'hit.wav';rate=48000;data=[]
+            for i in range(rate):
+                t=i/rate;amp=0 if t<0.25 else (0.4 if t<0.5 else 0.9*math.exp(-(t-0.5)*8))
+                data.append(int(amp*32767*math.sin(2*math.pi*440*t)))
+            with wave.open(str(f),'wb') as w:w.setnchannels(1);w.setsampwidth(2);w.setframerate(rate);w.writeframes(struct.pack('<%dh'%len(data),*data))
+            r=landmarks(f)
+            self.assertAlmostEqual(r['onset'],0.25,delta=0.01)
+            self.assertAlmostEqual(r['peak'],0.5,delta=0.01)
+            self.assertAlmostEqual(r['peakDbfs'],-0.9,delta=0.3)
 
 if __name__=='__main__':unittest.main()

@@ -2,6 +2,6 @@
   "name": "software-update-film",
   "private": true,
   "type": "module",
-  "scripts": {"build": "node build.mjs", "preview": "node preview.mjs", "render": "node render.mjs"},
-  "devDependencies": {"esbuild": "0.27.3", "playwright": "1.58.1", "react": "19.2.3", "react-dom": "19.2.3"}
+  "scripts": {"build": "node build.mjs", "preview": "node preview.mjs", "render": "node render.mjs", "stills": "node stills.mjs", "cover": "node cover.mjs"},
+  "devDependencies": {"esbuild": "0.27.3", "gsap": "3.15.0", "playwright": "1.58.1", "react": "19.2.3", "react-dom": "19.2.3", "three": "0.186.1"}
 }
