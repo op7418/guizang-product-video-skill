@@ -1,15 +1,16 @@
-// Configure the actual repository entry, aliases and display-only adapters here.
-// repoDir defaults to plan.repo, set by init_project.py --repo in every style.
+// Product integration for the video project (never edit the product repo).
+// repoDir defaults to plan.repo. Point '@' (or the repo's own alias) at its source; map
+// framework runtime modules (next/image, next/navigation, …) to display adapters in src/adapters/.
 export default {
   repoDir: null,
-  // aliases: {'@': '/absolute/repo/src', 'next/image': '/absolute/video/src/image-adapter.jsx'},
+  // aliases: {'@': '/abs/repo/src', 'next/image': new URL('./src/adapters/next-image.jsx', import.meta.url).pathname},
   aliases: {},
-  // Extra bare imports to leave external must be resolvable from the video project.
-  // CJS cannot synchronously load dependencies with top-level await. Marking them
-  // external alone still fails at runtime. Use a compatible synchronous entry,
-  // or adapt the video build/loader to asynchronous ESM or browser mounting.
+  // Bare imports to leave external must resolve from the video project at runtime.
   external: [],
-  // Plain CSS/CSS modules work out of the box. Compile Tailwind separately into
-  // src/product.css using the repository's installed Tailwind version and theme.
   loaders: {},
+  define: {},
+  // Extra esbuild options. Example: products with verbatimModuleSyntax keep type-only imports,
+  // which can drag server runtimes into the bundle:
+  //   esbuild: {tsconfigRaw: {compilerOptions: {verbatimModuleSyntax: false}}},
+  esbuild: {},
 };

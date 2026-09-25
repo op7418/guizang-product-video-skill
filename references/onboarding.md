@@ -6,7 +6,8 @@
 
 | 路径 | 所需环境 |
 | --- | --- |
-| 起步工程 | Python ≥3.9、Node ≥22、npm、FFmpeg/FFprobe；项目内 React、ReactDOM、esbuild、Playwright 及其可启动的 Chromium |
+| 起步工程 | Python ≥3.9、Node ≥22、npm、FFmpeg/FFprobe；项目内 React、ReactDOM、esbuild、GSAP、Three.js、Playwright 及其可启动的 Chromium |
+| 代码合成配乐（可选） | 使用 `score-example-cinematic.py` 这类依赖 numpy/scipy/soundfile 的脚本时，在视频工程里建 venv 安装，不装进系统 Python |
 | HyperFrames | 对应版本的官方运行要求、FFmpeg/FFprobe、可启动 Chrome；本 skill 音频脚本需要 Python |
 | 其他已有框架 | 保留框架与 lockfile，补齐其实际缺项 |
 
@@ -72,6 +73,8 @@ npx playwright install chromium --only-shell
 ```
 
 此命令适合起步工程默认 `headless:true`、未指定 channel 的导出。工程需要有头 Chromium 时去掉 `--only-shell`。Linux 缺系统库时可用 `npx playwright install --with-deps chromium`。依据 [Playwright 浏览器文档](https://playwright.dev/docs/browsers)，headless shell 与完整 Chromium 是独立文件，**以真实 launch 成败验收**。沙箱/权限导致 launch 失败时处理执行权限，重新下载浏览器无助于修复。
+
+起步工程的导出脚本带 `--use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist`，让 Three.js/WebGL 在无头模式下用软件渲染；环境检查实际启动浏览器时也带同样参数。
 
 ## HyperFrames
 

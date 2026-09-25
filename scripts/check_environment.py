@@ -68,9 +68,10 @@ def main():
         if path.is_file():package_files[file]=hashlib.sha256(path.read_bytes()).hexdigest()
     browser=None;modules={};hf=None
     if paths['node']:
-        names=['playwright','esbuild','react','react-dom'] if a.engine=='browser' else ['hyperframes']
+        names=['playwright','esbuild','react','react-dom','gsap','three'] if a.engine=='browser' else ['hyperframes']
         js='''const names=JSON.parse(process.argv[1]);const fs=require('fs');const result={};
-for(const name of names){try {const file=require.resolve(name+'/package.json');const pkg=JSON.parse(fs.readFileSync(file));result[name]={version:pkg.version,path:file};if(name==='hyperframes'){const path=require('path');const bin=typeof pkg.bin==='string'?pkg.bin:pkg.bin.hyperframes;result[name].cli=path.resolve(path.dirname(file),bin);}}catch(e){result[name]={missing:true,error:e.message};}}
+const locate=name=>{try{return require.resolve(name+'/package.json');}catch(e){const p=require('path');for(const d of require.resolve.paths(name)||[]){const f=p.join(d,name,'package.json');if(fs.existsSync(f))return f;}throw e;}};
+for(const name of names){try {const file=locate(name);const pkg=JSON.parse(fs.readFileSync(file));result[name]={version:pkg.version,path:file};if(name==='hyperframes'){const path=require('path');const bin=typeof pkg.bin==='string'?pkg.bin:pkg.bin.hyperframes;result[name].cli=path.resolve(path.dirname(file),bin);}}catch(e){result[name]={missing:true,error:e.message};}}
 console.log(JSON.stringify(result));'''
         result=run([paths['node'],'-e',js,json.dumps(names)],project)
         if result['ok']:
@@ -88,7 +89,7 @@ console.log(JSON.stringify(result));'''
     # Always recheck browser execution, even when package metadata is cached.
     if not missing and (a.engine=='browser' or not cached):
         if a.engine=='browser':
-            result=run([paths['node'],'-e',"const {chromium}=require('playwright');(async()=>{const b=await chromium.launch({headless:true});const p=await b.newPage();await p.setContent('<p>ready</p>');if(await p.textContent('p')!=='ready')throw Error('DOM failed');await b.close();})().catch(e=>{console.error(e.message);process.exit(1)});"],project)
+            result=run([paths['node'],'-e',"const {chromium}=require('playwright');(async()=>{const b=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});const p=await b.newPage();await p.setContent('<p>ready</p>');if(await p.textContent('p')!=='ready')throw Error('DOM failed');await b.close();})().catch(e=>{console.error(e.message);process.exit(1)});"],project)
             browser={'launched':result['ok'],'playwrightVersion':modules['playwright']['version']}
             if not result['ok']:
                 cached=False

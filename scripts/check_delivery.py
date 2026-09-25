@@ -49,6 +49,42 @@ def number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
+def pacing_metrics(video, fps, duration, shots):
+    """Frame-difference pacing: share of near-still frames, longest still run, hard changes. Needs ffmpeg."""
+    graph='scale=480:-2,format=gray,tblend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-'
+    proc=subprocess.run(['ffmpeg','-hide_banner','-nostats','-i',str(video),'-an','-vf',graph,'-f','null','-'],capture_output=True,text=True,check=True)
+    values=[float(m) for m in re.findall(r'lavfi\.signalstats\.YAVG=([-+0-9.eE]+)',proc.stdout)]
+    if not values:raise ValueError('no frame statistics')
+    still=[v<0.15 for v in values]
+    runs=[];start=None
+    for i,flag in enumerate(still+[False]):
+        if flag and start is None:start=i
+        elif not flag and start is not None:runs.append((start,i));start=None
+    def shot_at(t):
+        return next((str(s.get('id')) for s in shots if isinstance(s,dict) and number(s.get('start')) and s['start']<=t<s.get('end',0)),None)
+    tail=duration-1.0
+    body=[r for r in runs if (r[1]+1)/fps<tail] or runs
+    longest=max(body,key=lambda r:r[1]-r[0],default=(0,0))
+    return {'frames':len(values),'stillRatio':round(sum(still)/len(values),3),'movingRatio':round(sum(v>1.5 for v in values)/len(values),3),
+        'hardChanges':sum(v>12 for v in values),'meanDiff':round(sum(values)/len(values),3),
+        'longestStill':{'seconds':round((longest[1]-longest[0])/fps,2),'at':round((longest[0]+1)/fps,2),'shot':shot_at((longest[0]+1)/fps)},
+        'thresholds':{'still':0.15,'moving':1.5,'hardChange':12,'note':'mean absolute luma difference between consecutive frames at 480px width'}}
+
+
+def direction_checks(plan, errors, warnings, project_dir):
+    """Production films start from a written direction: concept choice, derived devices, frame system, shot list."""
+    if plan.get('demo') is not False:return
+    path=Path(project_dir or '.')/'DIRECTION.md'
+    if not path.is_file():
+        errors.append('Production film needs DIRECTION.md (references/direction.md): concept, derived devices, frame system, shot list');return
+    text=path.read_text(encoding='utf-8',errors='replace')
+    rows=[l for l in text.splitlines() if l.strip().startswith('|') and not set(l.replace('|','').strip())<=set('-: ')]
+    if len(rows)<len(plan.get('shots',[]))+1:
+        warnings.append('DIRECTION.md shot table looks incomplete; every plan shot should have picture, focal element, copy and sound')
+    if '因为' not in text and 'because' not in text.lower():
+        warnings.append('DIRECTION.md does not say why each device fits this product; derive devices from the product, not from a previous film')
+
+
 def creative_checks(plan, errors, warnings, project_dir, mix_report, final_video, plan_path):
     production = plan.get('demo') is False
     issue = errors if production else warnings
@@ -137,7 +173,7 @@ def creative_checks(plan, errors, warnings, project_dir, mix_report, final_video
 
 def check(plan, video=None, project_dir=None, mix_report=None, plan_path=None):
     errors, warnings = [], []
-    result = {'errors':errors, 'warnings':warnings, 'limits':['No semantic verification of feature claims', 'No visual clipping or taste assessment', 'No listening or sound cue alignment assessment']}
+    result = {'errors':errors, 'warnings':warnings, 'limits':['No semantic verification of feature claims', 'No visual clipping or taste assessment', 'No listening or sound cue alignment assessment', 'Pacing numbers are hints for where to look, not a quality score']}
     if not isinstance(plan, dict):
         errors.append('plan must be an object')
         return result
@@ -211,6 +247,7 @@ def check(plan, video=None, project_dir=None, mix_report=None, plan_path=None):
     if len(shots)>3 and len(types)<2:
         warnings.append('All shots use one layout type; review visual rhythm')
     creative_checks(plan, errors, warnings, project_dir, mix_report, bool(video), plan_path)
+    direction_checks(plan, errors, warnings, project_dir)
     if video:
         try:
             proc=subprocess.run(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(video)],capture_output=True,text=True,check=True)
@@ -235,6 +272,13 @@ def check(plan, video=None, project_dir=None, mix_report=None, plan_path=None):
                 ad=float(audios[0].get('duration',meta['format'].get('duration',0)))
                 if ad+0.2<plan['duration']:warnings.append('Audio stream ends before the video; inspect ending')
                 warnings.append('Audio stream exists; loudness, audibility and synchronization still need review')
+            if videos:
+                try:
+                    pacing=pacing_metrics(video,plan['fps'],plan['duration'],shots)
+                    result['pacing']=pacing
+                    run=pacing['longestStill']
+                    if run['seconds']>3:warnings.append(f"{run['seconds']}s nearly still around {run['at']}s ({run['shot']}); watch it: reading pause, or missing continuation? (hint only)")
+                except (subprocess.CalledProcessError,ValueError) as exc:warnings.append('Pacing statistics unavailable: '+str(exc))
         except (OSError,subprocess.CalledProcessError,ValueError,KeyError,ZeroDivisionError) as exc:
             errors.append('Could not inspect media: '+str(exc))
     return result

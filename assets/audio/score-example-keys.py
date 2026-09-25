@@ -1,7 +1,7 @@
-"""Music-only example from the later CodePilot promo: 48s, 120 BPM.
+"""Example score (light keys + soft rhythm) from an earlier CodePilot promo: 48s, 120 BPM, D major.
 Copy into a video project and adapt its arrangement to that film.
 No samples, third-party recordings, reference-film audio, or model API.
-Usage: python3 codepilot-score-example.py --output /path/to/new-music-dir
+Usage: python3 score-example-keys.py --output /path/to/new-music-dir
 """
 import argparse, array, math, wave, random, subprocess, shutil, sys
 from pathlib import Path

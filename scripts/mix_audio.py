@@ -110,16 +110,18 @@ def mix(plan_path):
         filters.append(f'[{i}:a]aresample=48000,aformat=channel_layouts=stereo,volume={cue.get("gain",1)},adelay={round(cue["at"]*1000)}:all=1[c{i}]')
     filters.append(''.join(f'[c{i}]' for i in range(len(cues)))+f'amix=inputs={len(cues)}:normalize=0,apad,atrim=duration={duration}[sfx]')
     # Float stem preserves summed transients until mastering; no early hard clipping.
-    run([*inputs,'-filter_complex',';'.join(filters),'-map','[sfx]','-c:a','pcm_f32le','-ar','48000',str(stem)])
+    # Hard output cap: an unterminated filter graph (apad) must never write an unbounded file.
+    cap=['-t',f'{duration:.3f}']
+    run([*inputs,'-filter_complex',';'.join(filters),'-map','[sfx]',*cap,'-c:a','pcm_f32le','-ar','48000',str(stem)])
     windows=duck_windows(audio,cues,duration)
     envelope=duck_expression(windows)
     bg_filters=f"aresample=48000,asetnsamples=n=240:p=0,volume='{music.get('gain',1)}*({envelope})':eval=frame,afade=t=in:d=0.025,afade=t=out:st={max(0,duration-.5)}:d=0.5,atrim=duration={duration}"
     # 240 samples at 48 kHz = 5 ms steps: smoother gain automation around short click transients.
-    run(['-i',str(music_path),'-af',bg_filters,'-ar','48000','-ac','2','-c:a','pcm_f32le',str(bgm_stem)])
+    run(['-i',str(music_path),'-af',bg_filters,*cap,'-ar','48000','-ac','2','-c:a','pcm_f32le',str(bgm_stem)])
     with tempfile.TemporaryDirectory(prefix='film-mix-') as tmp:
         raw=Path(tmp)/'raw.wav'
         graph=f'[0:a][1:a]amix=inputs=2:normalize=0,atrim=duration={duration}[mix]'
-        run(['-i',str(bgm_stem),'-i',str(stem),'-filter_complex',graph,'-map','[mix]','-ar','48000','-ac','2','-c:a','pcm_f32le',str(raw)])
+        run(['-i',str(bgm_stem),'-i',str(stem),'-filter_complex',graph,'-map','[mix]',*cap,'-ar','48000','-ac','2','-c:a','pcm_f32le',str(raw)])
         measurement=subprocess.run(['ffmpeg','-v','info','-i',str(raw),'-af','loudnorm=I=-16:TP=-1.5:LRA=8:print_format=json','-f','null','-'],capture_output=True,text=True,check=True).stderr
         stats=json.loads(measurement[measurement.rfind('{'):measurement.rfind('}')+1])
         if not all(math.isfinite(float(stats[k])) for k in ['input_i','input_tp','input_lra','input_thresh','target_offset']):raise ValueError('Silent/invalid mix')
