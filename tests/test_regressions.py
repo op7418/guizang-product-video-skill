@@ -19,7 +19,7 @@ class Delivery(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup);self.root=Path(self.temp.name).resolve()
         (self.root/'evidence.md').write_text('Release evidence fixture')
-        (self.root/'DIRECTION.md').write_text('# 方向\n因为产品是模型选择器，所以镜头推近选择器。\n| # | 镜头 |\n|---|---|\n| 1 | feature |\n')
+        (self.root/'DIRECTION.md').write_text('# 方向\n因为产品是模型选择器，所以镜头推近选择器。\n| # | 镜头 |\n|---|---|\n| 1 | feature |\n', encoding='utf-8')
         self.plan={'demo':False,'style':'repo','duration':5,'fps':30,'width':1920,'height':1080,'audioRequired':False,'audioExceptionReason':'User requested a silent version',
             'typography':{'mode':'bilingual','zhStyle':'sans-serif','zhFont':'Noto Sans CJK','enFont':'Georgia'},
             'shots':[{'id':'feature','start':0,'end':5,'type':'detail','headline':'切换模型，继续对话','headlineEn':'Switch models','claim':True,'source':['file:evidence.md'],
@@ -69,7 +69,7 @@ class Delivery(unittest.TestCase):
         self.assertTrue(any('DIRECTION.md' in x for x in self.errors()))
         self.plan['demo']=True;self.assertFalse(any('DIRECTION.md' in x for x in self.errors()))
     def test_direction_without_reasons_warns(self):
-        (self.root/'DIRECTION.md').write_text('| # | 镜头 |\n|---|---|\n| 1 | feature |\n')
+        (self.root/'DIRECTION.md').write_text('| # | 镜头 |\n|---|---|\n| 1 | feature |\n', encoding='utf-8')
         warnings=delivery.check(self.plan,project_dir=self.root)['warnings']
         self.assertTrue(any('derive devices' in w for w in warnings))
     def test_external_evidence_not_treated_as_file(self):
@@ -103,16 +103,16 @@ class Starter(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             repo=Path(d)/'repo';repo.mkdir();project=Path(d)/'video'
             subprocess.run([sys.executable,str(ROOT/'scripts/init_project.py'),'--output',str(project),'--style','default','--repo',str(repo)],capture_output=True,check=True)
-            plan=json.loads((project/'plan.json').read_text())
+            plan=json.loads((project/'plan.json').read_text(encoding='utf-8'))
             self.assertEqual(plan['repo'],str(repo.resolve()))
-            self.assertIn(str(repo.resolve()),(project/'BRIEF.md').read_text())
+            self.assertIn(str(repo.resolve()),(project/'BRIEF.md').read_text(encoding='utf-8'))
             plan['demo']=False
             self.assertTrue(any('at least one' in e for e in delivery.check(plan,project_dir=project)['errors']))
     def test_init_writes_direction_questions_not_answers(self):
         with tempfile.TemporaryDirectory() as d:
             repo=Path(d)/'repo';repo.mkdir();project=Path(d)/'video'
             subprocess.run([sys.executable,str(ROOT/'scripts/init_project.py'),'--output',str(project),'--style','repo','--repo',str(repo)],capture_output=True,check=True)
-            text=(project/'DIRECTION.md').read_text()
+            text=(project/'DIRECTION.md').read_text(encoding='utf-8')
             for heading in ['参考拆解','产品气质','三个方向','选择与理由','画面规范','镜头表']:self.assertIn(heading,text)
             self.assertIn('不要照抄',text)
             self.assertTrue((project/'src/engine.js').is_file())
@@ -120,8 +120,8 @@ class Starter(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             repo=Path(d)/'repo';repo.mkdir();project=Path(d)/'video'
             subprocess.run([sys.executable,str(ROOT/'scripts/init_project.py'),'--output',str(project),'--style','repo','--repo',str(repo)],capture_output=True,check=True)
-            ids=[s['id'] for s in json.loads((project/'plan.json').read_text())['shots']]
-            index=(project/'src/shots/index.js').read_text()
+            ids=[s['id'] for s in json.loads((project/'plan.json').read_text(encoding='utf-8'))['shots']]
+            index=(project/'src/shots/index.js').read_text(encoding='utf-8')
             for i in ids:self.assertIn(i+':',index)
 class FirstFrame(unittest.TestCase):
     @unittest.skipUnless(shutil.which('ffmpeg'),'FFmpeg needed')
@@ -149,10 +149,10 @@ class Mix(unittest.TestCase):
             actions=[{'id':f'k{i}','at':0.2+i*0.3,'action':'key','soundRequired':True} for i in range(8)]
             cues=[{'at':a['at'],'actionId':a['id'],'file':'assets/sfx/'+('a' if i%2 else 'b')+'.wav','gain':0.8,'role':'sfx','kind':'click'} for i,a in enumerate(actions)]
             plan={'duration':3,'fps':30,'shots':[{'id':'s','start':0,'end':3,'actions':actions}],'audio':{'music':{'file':'assets/music.wav','gain':0.6},'cues':cues,'ducking':{'enabled':True}}}
-            (root/'plan.json').write_text(json.dumps(plan))
+            (root/'plan.json').write_text(json.dumps(plan), encoding='utf-8')
             with contextlib.redirect_stdout(io.StringIO()):mixer.mix(root/'plan.json')
             for name in ['sfx-stem.wav','music-ducked.wav','master.wav']:
-                out=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','csv=p=0',str(root/'assets'/name)],capture_output=True,text=True).stdout
+                out=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','csv=p=0',str(root/'assets'/name)],capture_output=True,text=True,encoding='utf-8',errors='replace').stdout
                 self.assertAlmostEqual(float(out),3.0,delta=0.05,msg=name)
 class Landmarks(unittest.TestCase):
     @unittest.skipUnless(shutil.which('ffmpeg'),'FFmpeg needed')
@@ -169,5 +169,137 @@ class Landmarks(unittest.TestCase):
             self.assertAlmostEqual(r['onset'],0.25,delta=0.01)
             self.assertAlmostEqual(r['peak'],0.5,delta=0.01)
             self.assertAlmostEqual(r['peakDbfs'],-0.9,delta=0.3)
+
+class EncodingAndMigration(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root=Path(self.temp.name).resolve()
+
+    def test_init_project_utf8_encoding_and_reading(self):
+        repo = self.root / 'repo'
+        repo.mkdir()
+        project = self.root / 'video'
+        subprocess.run(
+            [sys.executable, str(ROOT / 'scripts/init_project.py'), '--output', str(project), '--style', 'default', '--repo', str(repo)],
+            capture_output=True, check=True
+        )
+        plan_bytes = (project / 'plan.json').read_bytes()
+        self.assertIn('软件更新 · 技术样片'.encode('utf-8'), plan_bytes)
+        brief_bytes = (project / 'BRIEF.md').read_bytes()
+        self.assertIn('视频 brief'.encode('utf-8'), brief_bytes)
+        pres_bytes = (project / 'src/presentations.jsx').read_bytes()
+        self.assertIn('组件展示 / DEMO'.encode('utf-8'), pres_bytes)
+        dir_bytes = (project / 'DIRECTION.md').read_bytes()
+        self.assertIn('影片方向'.encode('utf-8'), dir_bytes)
+
+        plan = delivery.load_plan(project / 'plan.json')
+        self.assertEqual(plan['product'], '软件更新 · 技术样片')
+
+        res = subprocess.run(
+            [sys.executable, str(ROOT / 'scripts/check_delivery.py'), str(project / 'plan.json')],
+            capture_output=True, text=True, encoding='utf-8', errors='replace'
+        )
+        self.assertEqual(res.returncode, 0)
+        self.assertIn('"ok": true', res.stdout)
+
+    def test_chinese_audio_filenames_mix_and_delivery_roundtrip(self):
+        import wave
+        import hashlib
+        def sha256(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+        def make_wav(p):
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with wave.open(str(p), 'wb') as f:
+                f.setnchannels(1); f.setsampwidth(2); f.setframerate(48000)
+                f.writeframes(b'\x00\x00' * 480)
+
+        music_path = self.root / 'assets/背景音乐.wav'
+        cue_path = self.root / 'assets/sfx/提示音.wav'
+        master_path = self.root / 'assets/master.wav'
+        stem_path = self.root / 'assets/sfx-stem.wav'
+        evidence_dir = self.root / 'evidence'
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+
+        for p in [music_path, cue_path, master_path, stem_path]:
+            make_wav(p)
+
+        plan = {
+            'duration': 5, 'fps': 30, 'width': 1920, 'height': 1080, 'demo': True, 'style': 'default',
+            'audioRequired': True, 'sfxRequired': True,
+            'audio': {
+                'ducking': {'enabled': True},
+                'music': {'file': 'assets/背景音乐.wav', 'gain': 0.65},
+                'cues': [{'at': 1.0, 'actionId': 'feat-enter', 'file': 'assets/sfx/提示音.wav', 'gain': 0.8, 'role': 'sfx', 'kind': 'click'}]
+            },
+            'shots': [{
+                'id': 'feat', 'start': 0, 'end': 5, 'type': 'detail', 'claim': False, 'source': [],
+                'headline': '中文特性', 'description': '说明文案', 'plainExplanation': '说明文案',
+                'actions': [{'id': 'feat-enter', 'at': 1.0, 'action': 'enter', 'soundRequired': True}]
+            }]
+        }
+        plan_path = self.root / 'plan.json'
+        plan_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+        report = {
+            'planSha256': sha256(plan_path),
+            'master': {'file': 'assets/master.wav', 'sha256': sha256(master_path)},
+            'sfxStem': {'file': 'assets/sfx-stem.wav', 'sha256': sha256(stem_path)},
+            'music': {'file': 'assets/背景音乐.wav', 'sha256': sha256(music_path)},
+            'ducking': {'method': 'cue-envelope', 'windows': []},
+            'cues': [{'at': 1.0, 'actionId': 'feat-enter', 'file': 'assets/sfx/提示音.wav', 'gain': 0.8, 'role': 'sfx', 'kind': 'click', 'sha256': sha256(cue_path)}],
+            'timing': []
+        }
+        mix_report_path = evidence_dir / 'audio-mix.json'
+        mix_report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+        result = delivery.check(plan, project_dir=self.root, mix_report=mix_report_path, plan_path=plan_path)
+        self.assertEqual(result['errors'], [])
+
+        res = subprocess.run(
+            [sys.executable, str(ROOT / 'scripts/check_delivery.py'), str(plan_path), '--mix-report', str(mix_report_path)],
+            capture_output=True, text=True, encoding='utf-8', errors='replace'
+        )
+        self.assertEqual(res.returncode, 0)
+        self.assertIn('"ok": true', res.stdout)
+
+    def test_legacy_non_utf8_plan_migration(self):
+        plan = {
+            'duration': 5, 'fps': 30, 'width': 1920, 'height': 1080, 'demo': True,
+            'audioRequired': False, 'audioExceptionReason': 'Testing legacy migration',
+            'shots': [{
+                'id': 'feat', 'start': 0, 'end': 5, 'type': 'detail', 'claim': False, 'source': [],
+                'headline': '历史遗留计划', 'description': 'GBK 编码计划说明', 'plainExplanation': 'GBK 编码计划说明',
+                'actions': []
+            }]
+        }
+        plan_path = self.root / 'plan.json'
+        plan_path.write_bytes(json.dumps(plan, ensure_ascii=False, indent=2).encode('cp936'))
+
+        with self.assertRaises(UnicodeDecodeError):
+            plan_path.read_text(encoding='utf-8')
+
+        loaded = delivery.load_plan(plan_path)
+        self.assertEqual(loaded['shots'][0]['headline'], '历史遗留计划')
+
+        migrated_text = plan_path.read_text(encoding='utf-8')
+        self.assertIn('历史遗留计划', migrated_text)
+
+        mix_audio = module('mix_audio')
+        loaded_again = mix_audio.load_plan(plan_path)
+        self.assertEqual(loaded_again['shots'][0]['headline'], '历史遗留计划')
+
+    def test_non_utf8_default_encoding_simulation(self):
+        orig_read_text = Path.read_text
+        def cp936_default_read_text(path_obj, encoding=None, errors=None):
+            if encoding is None:
+                encoding = 'cp936'
+            return orig_read_text(path_obj, encoding=encoding, errors=errors)
+
+        with patch.object(Path, 'read_text', side_effect=cp936_default_read_text, autospec=True):
+            # Verify load_plan preserves explicit UTF-8 decoding even when unparameterized read_text defaults to CP936.
+            plan_path = self.root / 'plan_utf8.json'
+            plan_path.write_text('{"test": "中文内容"}', encoding='utf-8')
+            loaded = delivery.load_plan(plan_path)
+            self.assertEqual(loaded['test'], '中文内容')
 
 if __name__=='__main__':unittest.main()

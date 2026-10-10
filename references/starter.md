@@ -156,6 +156,12 @@ npm run build
 
 改了分镜或配乐就重新混音；正式导出会核对 plan 与 master 的哈希。通用占位组件带 `data-skill-placeholder`，正式模式下 build 会拒绝仍在画面上的占位内容。
 
+本套工具链的所有生成文件（`plan.json`、`presentations.jsx`、`BRIEF.md`、`DIRECTION.md`、`audio-mix.json`）均统一采用 UTF-8 编码，以确保跨平台（特别是未开启全局 UTF-8 模式的 Windows CP936 环境）读写中文文案与音频路径时一致。若遇早期版本生成的非 UTF-8 `plan.json`，检查与混音脚本会自动识别并平滑升级为 UTF-8；也可手动执行一键转换：
+
+```sh
+python -c "from pathlib import Path; p=Path('plan.json'); p.write_text(p.read_text(encoding='locale'), encoding='utf-8')"
+```
+
 ## 接入回归
 
 修改构建器、引擎或 kit 后运行：
